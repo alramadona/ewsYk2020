@@ -1,0 +1,141 @@
+---
+title: "Peringatan Dini DBD"
+output: word_document
+params:
+  dat_mth: dat_mth
+  
+  area_sdistrict: area_sdistrict
+  area_village: area_village
+  
+  datDen_village: datDen_village
+  centroid_village: centroid_village
+  
+  datDen_subdistrict: datDen_subdistrict
+  centroid_sdistrict: centroid_sdistrict
+  
+  dat: dat
+  dat_train: dat_train
+  dat_test: dat_test
+
+---
+
+
+## Catatan
+
+```{r, echo=FALSE, warning=FALSE}
+print(paste0("Laporan Bulan ", params$dat_mth))
+
+```
+
+
+## Peta Sebaran Kasus
+
+```{r, echo=FALSE, warning=FALSE}
+library(tidyverse)
+#library(patchwork)
+library(sf)
+
+datMapV <- subset(params$datDen_village, YM==params$dat_mth)
+datMapV <- merge(params$centroid_village, datMapV, by="village")
+datMapV <- select(datMapV, YM,village,xcoord,ycoord,den)
+datMapV[datMapV == 0] <- NA
+
+p1 <- ggplot() +
+  geom_sf(data = params$area_village, size = 0.5, color = "black", fill = NA) +
+  geom_sf(data = params$area_sdistrict, size = 1.0, color = "black", fill = NA) +
+  geom_point(data = datMapV, aes(x = xcoord, y = ycoord), size = datMapV$den,
+             shape = 21, fill = "red") +
+  ggtitle("Kelurahan") +
+  #coord_sf() +
+  labs(x = "") +
+  labs(y = "") +
+  theme_bw()
+
+datMapD <- subset(params$datDen_subdistrict, YM==params$dat_mth)
+
+centroid_sdistrict <- params$centroid_sdistrict
+names(centroid_sdistrict)[2] <- "subdistrict"
+
+datMapD <- merge(centroid_sdistrict, datMapD, by="subdistrict")
+datMapD <- select(datMapD, YM,subdistrict,xcoord,ycoord,den)
+datMapD[datMapD == 0] <- NA
+
+p2 <- ggplot() + 
+  geom_sf(data = params$area_village, size = 0.5, color = "black", fill = NA) +
+  geom_sf(data = params$area_sdistrict, size = 1.0, color = "black", fill = NA) +
+  geom_point(data = datMapD, aes(x = xcoord, y = ycoord), size = datMapD$den, 
+             shape = 21, fill = "cyan") +
+  ggtitle("Kecamatan") + 
+  #oord_sf() +
+  labs(x = "") +
+  labs(y = "") +
+  theme_bw()
+
+#print(p1 + p2)
+
+p1
+p2
+
+```
+
+
+## Prediksi
+
+```{r, echo=FALSE, warning=FALSE, out.width="100%"}
+library(tidyverse)
+library(mgcv)
+
+dat <- params$dat
+dat_train <- params$dat_train
+dat_test <- params$dat_test
+
+plot(dat$YM, dat$out_3, ylim=c(0,900), type="l", xlab="", ylab="kasus", frame.plot=F, col="red")
+points(dat$YM, dat$den, type="h", col="grey75")
+
+points(dat_test$YM, dat_test$den, type="h", col="cadetblue1")
+abline(v=dat_test$YM[1], col="blue")
+abline(v=dat_test$YM[nrow(dat_test)-3], col="blue")
+
+points(dat_train$YM, dat_train$predict, type="p")
+points(dat_test$YM, dat_test$predict, type="p", col="blue")
+
+points(dat$YM, dat$out_1, type="l", col="darkgreen")
+points(dat$YM, dat$out_2, type="l", col="darkorange")
+points(dat$YM, dat$out_3, type="l", col="red")
+
+abline(h=c(400,425,450,475), col=c("darkgreen","darkorange","red","brown"), lty=3)
+# text(dat$YM[nrow(dat)],400, "m60", col="darkgreen", adj=c(0,0))
+# text(dat$YM[nrow(dat)],425, "1SD", col="darkorange", adj=c(0,0))
+# text(dat$YM[nrow(dat)],450, "2SD", col="red", adj=c(0,0))
+# text(dat$YM[nrow(dat)],475, "4", col="brown", adj=c(0,0))
+
+dat_train$outObs <- as.numeric(as.character(dat_train$outObs))
+dat_train$outPrd <- as.numeric(as.character(dat_train$outPrd))
+
+dat_test$outObs <- as.numeric(as.character(dat_test$outObs))
+dat_test$outPrd <- as.numeric(as.character(dat_test$outPrd))
+
+points(dat_train$YM, dat_train$outObs, lwd=3, pch=4, col="grey75")
+points(dat_train$YM, dat_train$outPrd, pch=20, col="black")
+
+points(dat_test$YM, dat_test$outObs, lwd=3, pch=4, col="cadetblue1")
+points(dat_test$YM, dat_test$outPrd, pch=20, col="blue")
+
+train_Prd_1 <- sum(as.numeric(as.character(dat_train$outSpc)), na.rm=T)
+train_Prd_tot <- as.numeric(as.character(nrow(dat_train)-sum(is.na(dat_train$outSpc))))
+train_Prd_pct <- round(train_Prd_1/train_Prd_tot*100,2)
+
+test_Prd_1 <- sum(as.numeric(as.character(dat_test$outSpc)), na.rm=T)
+test_Prd_tot <- as.numeric(as.character(nrow(dat_test)-sum(is.na(dat_test$outSpc))))
+test_Prd_pct <- round(test_Prd_1/test_Prd_tot*100,2)
+
+text(dat_train$YM[2], 500, "training set", col="black", adj=c(0,0))
+text(dat_test$YM[2], 500, "prediksi", col="blue", adj=c(0,0))
+# text(dat_test$YM[nrow(dat_test)-2], 500, "prediksi", col="blue", adj=c(0,0))
+
+# text(dat_train$YM[2], 350, paste0("akurasi ", train_Prd_pct, " %"), col="black", adj=c(0,0))
+# text(dat_test$YM[2], 350, paste0("akurasi ", test_Prd_pct, " %"), col="blue", adj=c(0,0))
+
+```
+
+
